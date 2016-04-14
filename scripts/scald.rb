@@ -79,6 +79,8 @@ OPTS_PARSER = Trollop::Parser.new do
   opt :hdfs, "Run on HDFS"
   opt :hdfs_local, "Run in Hadoop local mode"
   opt :local, "Run in Cascading local mode (does not use Hadoop)"
+  opt :ext_hadoop_cp, "Extended hadoop classpath, to have access to your classes in hdfs mode", :type => String
+  opt :hadoop_opts, "Add additional hadoop options to the Scalding repl", :type => String
   opt :print, "Print the command YOU SHOULD enter on the remote node. Useful for screen sessions"
   opt :scalaversion, "version of Scala for scalac (defaults to scalaVersion in build.sbt)", :type => String
   opt :print_cp, "Print the Scala classpath"
@@ -352,7 +354,7 @@ def hadoop_opts
   if !opts.has_key?("mapred.reduce.tasks")
     Trollop::die "number of reducers not set"
   end
-  opts.collect { |k,v| "-D#{k}=#{v}" }.join(" ")
+  opts.collect { |k,v| "-D#{k}=#{v}" }.join(" ") + " " + OPTS[:hadoop_opts].split(" ").map{ |v| "-D#{v}"}.join(" ")
 end
 
 def file_type
@@ -398,6 +400,13 @@ def get_job_name(file)
   end
 end
 
+def ext_hadoop_cp
+  if OPTS[:ext_hadoop_cp]
+    OPTS[:ext_hadoop_cp]
+  end
+end
+
+EXT_HADOOP_CP=ext_hadoop_cp
 JARPATH=File.expand_path(JARFILE)
 JARBASE=File.basename(JARFILE)
 JOBPATH=JOBFILE.nil? ? nil : File.expand_path(JOBFILE)
@@ -528,13 +537,13 @@ end
 
 def hadoop_command
   hadoop_libjars = ([MODULEJARPATHS.map{|n| File.basename(n)}, "job-jars/#{JOBJAR}"].select { |s| s != "" }).flatten.join(",")
-  "HADOOP_CLASSPATH=#{hadoop_classpath} " +
+  "HADOOP_CLASSPATH=#{hadoop_classpath}:#{EXT_HADOOP_CP} " +
     "hadoop jar #{JARBASE} -libjars #{hadoop_libjars} #{hadoop_opts} #{JOB} --hdfs " +
     JOB_ARGS
 end
 
 def jar_mode_command
-  "HADOOP_CLASSPATH=#{JARBASE} hadoop jar #{JARBASE} #{hadoop_opts} #{JOB} --hdfs " + JOB_ARGS
+  "HADOOP_CLASSPATH=#{JARBASE}:#{EXT_HADOOP_CP} hadoop jar #{JARBASE} #{hadoop_opts} #{JOB} --hdfs " + JOB_ARGS
 end
 
 #Always sync the remote JARFILE
