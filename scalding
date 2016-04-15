@@ -1,0 +1,15 @@
+#!/bin/sh
+
+if [ "$USE_MVN_CP" = "true" ]; then
+  if [ ! -f "pom.xml" ]; then
+    echo "Not in a maven directory, exiting"
+    exit 1
+  fi
+  echo "Getting the project classpath..."
+  mvn -q dependency:build-classpath -Dmdep.outputFile=classpath.txt
+  export CLASSPATH="$CLASSPATH:$(cat classpath.txt)"
+  rm classpath.txt
+  echo "Done"
+fi
+
+java -Dscala.usejavacp=true -jar $(dirname $0)/scalding-repl/target/scala-2.10/scalding-repl-assembly-0.15.0.jar "$@"
