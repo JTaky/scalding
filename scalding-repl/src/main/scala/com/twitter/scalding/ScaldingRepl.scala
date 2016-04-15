@@ -17,18 +17,21 @@ package com.twitter.scalding
 
 import java.io.File
 
-import scala.tools.nsc.interpreter.IR
+import ammonite.repl.{ Repl, Storage }
 
 /**
  * A class providing Scalding specific commands for inclusion in the Scalding REPL.
  */
-class ScaldingILoop
-  extends ILoopCompat {
-  override def printWelcome() {
+class ScaldingRepl(storage: Storage, predef: String)
+  extends Repl(System.in, System.out, System.err, storage, predef) {
+
+  prompt.update(ScaldingShell.prompt())
+
+  override def printBanner() {
     val fc = Console.YELLOW
     val wc = Console.RED
     def wrapFlames(s: String) = s.replaceAll("[()]+", fc + "$0" + wc)
-    echo(fc +
+    printStream.println(fc +
       " (                                           \n" +
       " )\\ )            (   (                       \n" +
       "(()/(         )  )\\  )\\ )  (          (  (   \n" +
@@ -37,28 +40,32 @@ class ScaldingILoop
       wrapFlames("/ __|((_) ((_)_ | |  _| | (_) _(_(( (_()_) \n") +
       wrapFlames("\\__ \\/ _| / _` || |/ _` | | || ' \\))/ _` \\  \n") +
       "|___/\\__| \\__,_||_|\\__,_| |_||_||_| \\__, |  \n" +
-      "                                    |___/   ")
+      " Ammonite Repl 0.5.7/2.10.5         |___/   ")
   }
+}
 
-  /**
-   * Commands specific to the Scalding REPL. To define a new command use one of the following
-   * factory methods:
-   * - `LoopCommand.nullary` for commands that take no arguments
-   * - `LoopCommand.cmd` for commands that take one string argument
-   * - `LoopCommand.varargs` for commands that take multiple string arguments
-   */
-  private val scaldingCommands: List[LoopCommand] = List()
+object ScaldingRepl {
+  def apply(storage: Storage, paths: Array[String]): ScaldingRepl = {
+    val imports = "import " + Seq(
+      "ammonite.ops.Path",
+      "com.twitter.scalding._",
+      "com.twitter.scalding.ReplImplicits._",
+      "com.twitter.scalding.ReplImplicitContext._").mkString(", ")
 
-  /**
-   * Change the shell prompt to read scalding&gt;
-   *
-   * @return a prompt string to use for this REPL.
-   */
-  override def prompt: String = ScaldingShell.prompt()
+    // interpret all files named ".scalding_repl" from the current directory up to the root
+    val initScripts = findAllUpPath(".scalding_repl")
+      .reverse // work down from top level file to more specific ones
+      .map(f => "load.exec(Path(\"%s\"))".format(f))
 
-  private[this] def addImports(ids: String*): IR.Result =
-    if (ids.isEmpty) IR.Success
-    else intp.interpret("import " + ids.mkString(", "))
+    val classpaths = paths
+      .filter(_.startsWith("/"))
+      .map("load.cp(Path(\"%s\"))".format(_))
+
+    val predef = (Seq(imports) ++ initScripts ++ classpaths)
+      .mkString(System.lineSeparator())
+
+    new ScaldingRepl(storage, predef)
+  }
 
   /**
    * Search for files with the given name in all directories from current directory
@@ -69,28 +76,4 @@ class ScaldingILoop
       .takeWhile(_ != "/")
       .flatMap(new File(_).listFiles.filter(_.toString.endsWith(filename)))
       .toList
-
-  /**
-   * Gets the list of commands that this REPL supports.
-   *
-   * @return a list of the command supported by this REPL.
-   */
-  override def commands: List[LoopCommand] = super.commands ++ scaldingCommands
-
-  override def createInterpreter() {
-    super.createInterpreter()
-    addThunk {
-      intp.beQuietDuring {
-        addImports(
-          "com.twitter.scalding._",
-          "com.twitter.scalding.ReplImplicits._",
-          "com.twitter.scalding.ReplImplicitContext._")
-
-        // interpret all files named ".scalding_repl" from the current directory up to the root
-        findAllUpPath(".scalding_repl")
-          .reverse // work down from top level file to more specific ones
-          .foreach(f => loadCommand(f.toString))
-      }
-    }
-  }
 }

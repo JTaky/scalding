@@ -23,11 +23,11 @@ import java.util.jar.JarOutputStream
 import org.apache.hadoop.util.GenericOptionsParser
 import org.apache.hadoop.conf.Configuration
 
-import scala.tools.nsc.{ GenericRunnerCommand, MainGenericRunner }
-import scala.tools.nsc.interpreter.ILoop
+import scala.tools.nsc.MainGenericRunner
 import scala.tools.nsc.io.VirtualDirectory
-
 import com.google.common.io.Files
+import ammonite.ops.Path
+import ammonite.repl.Storage
 
 /**
  * A runner for a Scala REPL providing functionality extensions specific to working with
@@ -35,13 +35,15 @@ import com.google.common.io.Files
  */
 object ScaldingShell extends MainGenericRunner {
 
+  private def defaultAmmoniteHome = Path(System.getProperty("user.home")) / ".ammonite"
+
   /** Customizable prompt. */
   var prompt: () => String = { () => Console.BLUE + "\nscalding> " + Console.RESET }
 
   /**
    * An instance of the Scala REPL the user will interact with.
    */
-  private var scaldingREPL: Option[ILoop] = None
+  private var scaldingREPL: Option[ScaldingRepl] = None
 
   /**
    * An instance of the default configuration for the REPL
@@ -64,21 +66,20 @@ object ScaldingShell extends MainGenericRunner {
 
     // Process command line arguments into a settings object, and use that to start the REPL.
     // We ignore params we don't care about - hence error function is empty
-    val command = new GenericRunnerCommand(jobArgs.toList, _ => ())
+    // TODO: val command = new GenericRunnerCommand(jobArgs.toList, _ => ())
 
     // inherit defaults for embedded interpretter (needed for running with SBT)
     // (TypedPipe chosen arbitrarily, just needs to be something representative)
-    command.settings.embeddedDefaults[TypedPipe[String]]
+    // TODO: command.settings.embeddedDefaults[TypedPipe[String]]
 
     // if running from the assembly, need to explicitly tell it to use java classpath
-    if (args.contains("--repl")) command.settings.usejavacp.value = true
-
-    command.settings.classpath.append(System.getProperty("java.class.path"))
+    // TODO: if (args.contains("--repl")) command.settings.usejavacp.value = true
 
     // Force the repl to be synchronous, so all cmds are executed in the same thread
-    command.settings.Yreplsync.value = true
+    // TODO: command.settings.Yreplsync.value = true
 
-    scaldingREPL = Some(new ScaldingILoop)
+    val storage = Storage(defaultAmmoniteHome, None)
+    scaldingREPL = Some(ScaldingRepl(storage, System.getenv("CLASSPATH").split(":")))
     ReplImplicits.mode = mode
     // if in Hdfs mode, store the mode to enable switching between Local and Hdfs
     mode match {
@@ -86,7 +87,12 @@ object ScaldingShell extends MainGenericRunner {
       case _ => ()
     }
 
-    scaldingREPL.get.process(command.settings)
+    try {
+      scaldingREPL.get.run()
+      true
+    } catch {
+      case _: Throwable => false
+    }
   }
 
   // This both updates the jobConf with hadoop arguments
@@ -126,7 +132,7 @@ object ScaldingShell extends MainGenericRunner {
    */
   private[scalding] def createReplCodeJar(): Option[File] = {
     scaldingREPL.map { repl =>
-      val virtualDirectory = repl.virtualDirectory
+      val virtualDirectory = repl.interp.dynamicClasspath
       val tempJar = new File(Files.createTempDir(),
         "scalding-repl-session-" + System.currentTimeMillis() + ".jar")
       createJar(virtualDirectory.asInstanceOf[VirtualDirectory], tempJar)

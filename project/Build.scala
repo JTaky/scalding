@@ -377,9 +377,12 @@ object ScaldingBuild extends Build {
         "org.scala-lang" % "scala-reflect" % scalaVersion,
         "org.apache.hadoop" % "hadoop-core" % hadoopVersion % "provided",
         "org.apache.hadoop" % "hadoop-core" % hadoopVersion % "unprovided",
+        "org.apache.hadoop" % "hadoop-core" % hadoopVersion, // TODO: remove this
         "org.slf4j" % "slf4j-api" % slf4jVersion,
         "org.slf4j" % "slf4j-log4j12" % slf4jVersion % "provided",
-        "org.slf4j" % "slf4j-log4j12" % slf4jVersion % "unprovided"
+        "org.slf4j" % "slf4j-log4j12" % slf4jVersion % "unprovided",
+        "org.slf4j" % "slf4j-log4j12" % slf4jVersion, // TODO: remove this
+        "com.lihaoyi" % "ammonite-repl_2.10.5" % "0.5.7"
       )
       },
       // https://gist.github.com/djspiewak/976cd8ac65e20e136f05
